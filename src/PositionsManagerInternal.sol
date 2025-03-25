@@ -95,6 +95,79 @@ abstract contract PositionsManagerInternal is MatchingEngine {
         if (market.isSupplyCollateralPaused()) revert Errors.SupplyCollateralIsPaused();
         if (!market.isCollateral) revert Errors.AssetNotCollateralOnMorpho();
     }
+    
+    function _validateSupplyAgg(address underlying, uint256 amount, address user) 
+    internal 
+        view 
+        returns (Types.Market storage market)
+    {
+        market = _validateInput(underlying, amount, user);
+        if (market.isSupplyPaused()) revert Errors.SupplyIsPaused();
+    }
+
+    function _executeSupplyAgg(
+        address underlying,
+        uint256 amount,
+        address from,
+        address onBehalf,
+        uint256 maxIterations,
+        Types.Indexes256 memory indexes
+    ) internal returns (Types.SupplyRepayVars memory vars) {
+        vars = _accountSupplyAgg(underlying, amount, onBehalf, maxIterations, indexes);
+
+        emit Events.SuppliedAgg(from, onBehalf, underlying, amount, vars.onPool, vars.inP2P);
+    }
+
+    function _accountSupplyAgg(
+        address underlying,
+        uint256 amount,
+        address onBehalf,
+        uint256 maxIterations,
+        Types.Indexes256 memory indexes
+    ) internal returns (Types.SupplyRepayVars memory vars) {
+        Types.Market storage market = _market[underlying];
+        Types.MarketBalances storage marketBalances = _marketBalances[underlying];
+        vars.onPool = marketBalances.scaledPoolSupplyBalance(onBehalf);
+        vars.inP2P = marketBalances.scaledP2PSupplyBalance(onBehalf);
+
+        /* Peer-to-peer supply */
+
+        if (!market.isP2PDisabled()) {
+            // Decrease the peer-to-peer borrow delta.
+            (amount, vars.toRepay) =
+                market.deltas.borrow.decreaseDelta(underlying, amount, indexes.borrow.poolIndex, true);
+
+            // Promote pool borrowers.
+            uint256 promoted;
+            (amount, promoted,) = _promoteRoutine(underlying, amount, maxIterations, _promoteBorrowers);
+            vars.toRepay += promoted;
+
+            // Update the peer-to-peer totals.
+            vars.inP2P += market.deltas.increaseP2P(underlying, promoted, vars.toRepay, indexes, true);
+        }
+
+        /* Pool supply */
+
+        // Supply on pool.
+        (vars.toSupply, vars.onPool) = _addToPool(amount, vars.onPool, indexes.supply.poolIndex);
+
+        (vars.onPool, vars.inP2P) = _updateSupplierInDS(underlying, onBehalf, vars.onPool, vars.inP2P, false);
+
+        
+        /* Collateral */
+
+        uint256 poolSupplyIndex = indexes.supply.poolIndex;
+        uint256 collateralBalance = marketBalances.collateral[onBehalf];
+
+        _updateRewards(onBehalf, _market[underlying].aToken, collateralBalance);
+
+        collateralBalance += amount.rayDivDown(poolSupplyIndex);
+
+        marketBalances.collateral[onBehalf] = collateralBalance;
+
+        _userCollaterals[onBehalf].add(underlying);
+        
+    }
 
     /// @dev Validates a borrow action.
     function _validateBorrow(address underlying, uint256 amount, address borrower, address receiver)
@@ -217,24 +290,24 @@ abstract contract PositionsManagerInternal is MatchingEngine {
 
         if (!market.isP2PDisabled()) {
             // Decrease the peer-to-peer borrow delta.
-            (amount, vars.toRepay) =
-                market.deltas.borrow.decreaseDelta(underlying, amount, indexes.borrow.poolIndex, true);
+            (amount, vars.toRepay) = // (delta를 줄이고 더 처리해야 하는 양, amount와 처리 가능한 양 중 작은 값.)
+                market.deltas.borrow.decreaseDelta(underlying, amount, indexes.borrow.poolIndex, true); // detla 줄이고 -> 이를 vars.toRepay에 저장
 
             // Promote pool borrowers.
             uint256 promoted;
-            (amount, promoted,) = _promoteRoutine(underlying, amount, maxIterations, _promoteBorrowers);
-            vars.toRepay += promoted;
+            (amount, promoted,) = _promoteRoutine(underlying, amount, maxIterations, _promoteBorrowers); // 더 Promote해야하는 양, promote된 양. 남은 iterations 수
+            vars.toRepay += promoted; // vars.toRepay는 P2P 매칭을 통해 상환되어야 할 양
 
             // Update the peer-to-peer totals.
-            vars.inP2P += market.deltas.increaseP2P(underlying, promoted, vars.toRepay, indexes, true);
+            vars.inP2P += market.deltas.increaseP2P(underlying, promoted, vars.toRepay, indexes, true); // 사용자의 P2P잔액을 증가시킴
         }
 
         /* Pool supply */
 
         // Supply on pool.
-        (vars.toSupply, vars.onPool) = _addToPool(amount, vars.onPool, indexes.supply.poolIndex);
+        (vars.toSupply, vars.onPool) = _addToPool(amount, vars.onPool, indexes.supply.poolIndex); // p2p 매칭 후 남은 양 pool에 공급
 
-        (vars.onPool, vars.inP2P) = _updateSupplierInDS(underlying, onBehalf, vars.onPool, vars.inP2P, false);
+        (vars.onPool, vars.inP2P) = _updateSupplierInDS(underlying, onBehalf, vars.onPool, vars.inP2P, false); // 최종적으로 사용자의 공급 정보를 데이터 구조에 업데이트함, p2p잔액 저장소에 기록
     }
 
     /// @dev Performs the accounting of a borrow action.
@@ -248,35 +321,35 @@ abstract contract PositionsManagerInternal is MatchingEngine {
     ) internal returns (Types.BorrowWithdrawVars memory vars) {
         Types.Market storage market = _market[underlying];
         Types.MarketBalances storage marketBalances = _marketBalances[underlying];
-        vars.onPool = marketBalances.scaledPoolBorrowBalance(borrower);
-        vars.inP2P = marketBalances.scaledP2PBorrowBalance(borrower);
+        vars.onPool = marketBalances.scaledPoolBorrowBalance(borrower); // borrower가 pool에 넣은 양
+        vars.inP2P = marketBalances.scaledP2PBorrowBalance(borrower); //borrower가 p2p로 매칭된 양 확인
 
         /* Peer-to-peer borrow */
 
         if (!market.isP2PDisabled()) {
             // Decrease the peer-to-peer idle supply.
             uint256 matchedIdle;
-            (amount, matchedIdle) = market.decreaseIdle(underlying, amount);
+            (amount, matchedIdle) = market.decreaseIdle(underlying, amount); // return값은 현재 matching되지 않은 amount, matching된 amount
 
             // Decrease the peer-to-peer supply delta.
             (amount, vars.toWithdraw) =
-                market.deltas.supply.decreaseDelta(underlying, amount, indexes.supply.poolIndex, false);
+                market.deltas.supply.decreaseDelta(underlying, amount, indexes.supply.poolIndex, false); // P2p supply delta 감소
 
             // Promote pool suppliers.
             uint256 promoted;
-            (amount, promoted,) = _promoteRoutine(underlying, amount, maxIterations, _promoteSuppliers);
+            (amount, promoted,) = _promoteRoutine(underlying, amount, maxIterations, _promoteSuppliers); // promote 시킴
             vars.toWithdraw += promoted;
 
             // Update the peer-to-peer totals.
-            vars.inP2P += market.deltas.increaseP2P(underlying, promoted, vars.toWithdraw + matchedIdle, indexes, false);
+            vars.inP2P += market.deltas.increaseP2P(underlying, promoted, vars.toWithdraw + matchedIdle, indexes, false); // p2p total 업그레이드 시킴
         }
 
         /* Pool borrow */
 
         // Borrow on pool.
-        (vars.toBorrow, vars.onPool) = _addToPool(amount, vars.onPool, indexes.borrow.poolIndex);
+        (vars.toBorrow, vars.onPool) = _addToPool(amount, vars.onPool, indexes.borrow.poolIndex); // pool에 update
 
-        (vars.onPool, vars.inP2P) = _updateBorrowerInDS(underlying, borrower, vars.onPool, vars.inP2P, false);
+        (vars.onPool, vars.inP2P) = _updateBorrowerInDS(underlying, borrower, vars.onPool, vars.inP2P, false); // DS에 업데이트 진행
     }
 
     /// @dev Performs the accounting of a repay action.
@@ -525,6 +598,104 @@ abstract contract PositionsManagerInternal is MatchingEngine {
         emit Events.CollateralWithdrawn(msg.sender, onBehalf, receiver, underlying, amount, collateralBalance);
     }
 
+    function _executeWithdrawAgg(
+        address underlying,
+        uint256 amount,
+        address onBehalf,
+        address receiver,
+        uint256 maxIterations,
+        Types.Indexes256 memory indexes
+    ) internal returns (Types.BorrowWithdrawVars memory vars) {
+        vars = _accountWithdrawAgg(underlying, amount, onBehalf, maxIterations, indexes);
+
+        emit Events.Withdrawn(msg.sender, onBehalf, receiver, underlying, amount, vars.onPool, vars.inP2P);
+    }
+    function _accountWithdrawAgg(
+        address underlying,
+        uint256 amount,
+        address supplier,
+        uint256 maxIterations,
+        Types.Indexes256 memory indexes
+    ) internal returns (Types.BorrowWithdrawVars memory vars) {
+        Types.MarketBalances storage marketBalances = _marketBalances[underlying];
+        vars.onPool = marketBalances.scaledPoolSupplyBalance(supplier);
+        vars.inP2P = marketBalances.scaledP2PSupplyBalance(supplier);
+
+        uint256 poolSupplyIndex = indexes.supply.poolIndex;
+
+        /* Pool withdraw */
+
+        // Performs the accounting of a withdraw collateral action.
+        
+        uint256 collateralBalance = marketBalances.collateral[supplier];
+
+        _updateRewards(supplier, _market[underlying].aToken, collateralBalance);
+
+        if (collateralBalance < amount.rayDivUp(poolSupplyIndex)) {
+            revert Errors.InsufficientCollateral();
+        }
+        collateralBalance = collateralBalance.zeroFloorSub(amount.rayDivUp(poolSupplyIndex));
+
+        marketBalances.collateral[supplier] = collateralBalance;
+
+        if (collateralBalance == 0) _userCollaterals[supplier].remove(underlying);
+
+        // Withdraw supply on pool.
+
+        if (vars.onPool < amount) {
+            revert Errors.InsufficientLiquidity();
+        }
+
+        (amount, vars.toWithdraw, vars.onPool) = _subFromPool(amount, vars.onPool, indexes.supply.poolIndex);
+
+        Types.Market storage market = _market[underlying];
+
+
+        // Withdraw supply peer-to-peer.
+        if (vars.inP2P < amount.rayDivUp(indexes.supply.p2pIndex)) {
+            revert Errors.InsufficientP2PLiquidity();
+        }
+        vars.inP2P = vars.inP2P.zeroFloorSub(amount.rayDivUp(indexes.supply.p2pIndex)); // In peer-to-peer supply unit.
+
+        (vars.onPool, vars.inP2P) = _updateSupplierInDS(underlying, supplier, vars.onPool, vars.inP2P, false);
+
+        // Returning early requires having updated the supplier in the data structure, which in turn requires having updated `inP2P`.
+        if (amount == 0) return vars;
+
+        // Decrease the peer-to-peer idle supply.
+        uint256 matchedIdle;
+        (amount, matchedIdle) = market.decreaseIdle(underlying, amount);
+
+        // Decrease the peer-to-peer supply delta.
+        uint256 toWithdrawStep;
+        (amount, toWithdrawStep) =
+            market.deltas.supply.decreaseDelta(underlying, amount, indexes.supply.poolIndex, false);
+        vars.toWithdraw += toWithdrawStep;
+        uint256 p2pTotalSupplyDecrease = toWithdrawStep + matchedIdle;
+
+        /* Transfer withdraw */
+
+        if (!market.isP2PDisabled()) {
+            // Promote pool suppliers.
+            (vars.toBorrow, toWithdrawStep, maxIterations) =
+                _promoteRoutine(underlying, amount, maxIterations, _promoteSuppliers);
+            vars.toWithdraw += toWithdrawStep;
+        } else {
+            vars.toBorrow = amount;
+        }
+
+        /* Breaking withdraw */
+
+        // Demote peer-to-peer borrowers.
+        uint256 demoted = _demoteBorrowers(underlying, vars.toBorrow, maxIterations);
+
+        // Increase the peer-to-peer borrow delta.
+        market.deltas.borrow.increaseDelta(underlying, vars.toBorrow - demoted, indexes.borrow, true);
+
+        // Update the peer-to-peer totals.
+        market.deltas.decreaseP2P(underlying, demoted, vars.toBorrow + p2pTotalSupplyDecrease, indexes, true);
+    }
+
     /// @notice Given variables from a market side, calculates the amount to supply/borrow and a new on pool amount.
     /// @param amount The amount to supply/borrow.
     /// @param onPool The current user's scaled on pool balance.
@@ -577,7 +748,7 @@ abstract contract PositionsManagerInternal is MatchingEngine {
 
         (uint256 promoted, uint256 iterationsDone) = promote(underlying, amount, maxIterations); // In underlying.
 
-        return (amount - promoted, promoted, maxIterations - iterationsDone);
+        return (amount - promoted, promoted, maxIterations - iterationsDone); 
     }
 
     /// @dev Calculates the amount to seize during a liquidation process.

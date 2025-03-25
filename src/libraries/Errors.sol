@@ -125,4 +125,8 @@ library Errors {
 
     /// @notice Thrown when the borrow cap on Aave is exceeded.
     error ExceedsBorrowCap();
+
+    error InsufficientCollateral();
+    error InsufficientLiquidity();
+    error InsufficientP2PLiquidity();
 }

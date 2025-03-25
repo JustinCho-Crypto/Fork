@@ -89,6 +89,24 @@ contract PositionsManager is IPositionsManager, PositionsManagerInternal {
         return amount;
     }
 
+    function supplyAggLogic(address underlying, uint256 amount, address from, address onBehalf, uint256 maxIterations)
+        external
+        returns (uint256)
+    {
+        Types.Market storage market = _validateSupplyAgg(underlying, amount, onBehalf);
+
+        Types.Indexes256 memory indexes = _updateIndexes(underlying);
+
+        ERC20Permit2(underlying).transferFrom2(from, address(this), amount);
+
+        Types.SupplyRepayVars memory vars = _executeSupplyAgg(underlying, amount, from, onBehalf, maxIterations, indexes);
+
+        _pool.repayToPool(underlying, market.variableDebtToken, vars.toRepay);
+        _pool.supplyToPool(underlying, vars.toSupply, indexes.supply.poolIndex);
+
+        return amount;
+    }
+
     /// @notice Implements the borrow logic.
     /// @param underlying The address of the underlying asset to borrow.
     /// @param amount The amount of `underlying` to borrow.
@@ -214,6 +232,32 @@ contract PositionsManager is IPositionsManager, PositionsManagerInternal {
         return amount;
     }
 
+    function withdrawAggLogic(
+        address underlying,
+        uint256 amount,
+        address supplier,
+        address receiver,
+        uint256 maxIterations
+    ) external returns (uint256) {
+        Types.Market storage market = _validateWithdraw(underlying, amount, supplier, receiver);
+
+        Types.Indexes256 memory indexes = _updateIndexes(underlying);
+        amount = Math.min(_getUserSupplyBalanceFromIndexes(underlying, supplier, indexes), amount);
+
+        if (amount == 0) revert Errors.SupplyIsZero();
+
+        Types.BorrowWithdrawVars memory vars = _executeWithdrawAgg(
+            underlying, amount, supplier, receiver, Math.max(_defaultIterations.withdraw, maxIterations), indexes
+        );
+
+        _pool.withdrawFromPool(underlying, market.aToken, vars.toWithdraw);
+        _pool.borrowFromPool(underlying, vars.toBorrow);
+
+        ERC20(underlying).safeTransfer(receiver, amount);
+
+        return amount;
+    }
+    
     /// @notice Implements the liquidation logic.
     /// @param underlyingBorrowed The address of the underlying borrowed to repay.
     /// @param underlyingCollateral The address of the underlying collateral to seize.

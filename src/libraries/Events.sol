@@ -22,6 +22,15 @@ library Events {
         uint256 scaledInP2P
     );
 
+    event SuppliedAgg(
+        address from,
+        address onBehalf,
+        address underlying,
+        uint256 amount,
+        uint256 scaledOnPool,
+        uint256 scaledInP2P
+        );
+
     /// @notice Emitted when a supply collateral happens.
     /// @param from The address of the user supplying the funds.
     /// @param onBehalf The address of the user on behalf of which the position is created.
@@ -102,6 +111,16 @@ library Events {
         address indexed underlying,
         uint256 amount,
         uint256 scaledBalance
+    );
+
+    event WithdrawnAgg(
+        address caller,
+        address indexed onBehalf,
+        address indexed receiver,
+        address indexed underlying,
+        uint256 amount,
+        uint256 scaledOnPool,
+        uint256 scaledInP2P
     );
 
     /// @notice Emitted when a liquidate happens.

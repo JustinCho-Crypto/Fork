@@ -25,9 +25,18 @@ interface IPositionsManager {
         address receiver,
         uint256 maxIterations
     ) external returns (uint256 withdrawn);
+    
     function withdrawCollateralLogic(address underlying, uint256 amount, address supplier, address receiver)
         external
         returns (uint256 withdrawn);
+
+    function withdrawAggLogic(
+        address underlying,
+        uint256 amount,
+        address supplier,
+        address receiver,
+        uint256 maxIterations
+    ) external returns (uint256 withdrawnAgg);
 
     function liquidateLogic(
         address underlyingBorrowed,
@@ -36,4 +45,7 @@ interface IPositionsManager {
         address borrower,
         address liquidator
     ) external returns (uint256 liquidated, uint256 seized);
+
+    function supplyAggLogic(address underlying, uint256 amount, address from, address onBehalf, uint256 maxIterations)
+    external returns (uint256);
 }

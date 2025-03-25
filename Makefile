@@ -4,7 +4,6 @@ MAKEFLAGS += --no-print-directory
 
 NETWORK ?= ethereum-mainnet
 
-
 install:
 	yarn
 	foundryup
@@ -30,7 +29,7 @@ test-unit:
 	@FOUNDRY_MATCH_CONTRACT=TestUnit make test
 
 test:
-	forge test -vvv
+	forge test -vvvv
 
 
 test-invariant-%:

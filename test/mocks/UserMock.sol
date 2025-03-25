@@ -61,6 +61,18 @@ contract UserMock {
         return supplyCollateral(underlying, amount, address(this));
     }
 
+    function supplyAgg(address underlying, uint256 amount, address onBehalf, uint256 maxItereations)
+    public returns (uint256) {
+        return morpho.supplyAgg(underlying, amount, onBehalf, maxItereations);
+    }
+
+    function supplyAgg(address underlying, uint256 amount, address onBehalf) 
+        public
+        returns (uint256) {
+            return morpho.supplyAgg(underlying, amount, onBehalf, DEFAULT_MAX_ITERATIONS);
+        }
+    
+
     function borrow(address underlying, uint256 amount, address onBehalf, address receiver, uint256 maxIterations)
         public
         returns (uint256)
@@ -138,6 +150,41 @@ contract UserMock {
 
     function withdrawCollateral(address underlying, uint256 amount) public returns (uint256) {
         return withdrawCollateral(underlying, amount, address(this));
+    }
+
+    function withdrawAgg(address underlying, uint256 amount, address onBehalf, address receiver, uint256 maxIterations)
+        public
+        returns(uint256)
+    {
+        return morpho.withdraw(underlying, amount, onBehalf, receiver, maxIterations);
+    }
+
+    function withdrawAgg(address underlying, uint256 amount, address onBehalf, address receiver)
+        public
+        returns(uint256)
+    {
+        return withdrawAgg(underlying, amount, onBehalf, receiver, DEFAULT_MAX_ITERATIONS);
+    }
+
+    function withdrawAgg(address underlying, uint256 amount, uint256 maxIterations)
+        public 
+        returns(uint256)
+    {
+        return withdrawAgg(underlying, amount, address(this), address(this), maxIterations);
+    }
+
+    function withdrawAgg(address underlying, uint256 amount, address onBehalf)
+        public 
+        returns(uint256)
+    {
+        return withdrawAgg(underlying, amount, onBehalf, address(this));
+    }
+
+    function withdrawAgg(address underlying, uint256 amount)
+        public 
+        returns(uint256)
+    {
+        return withdrawAgg(underlying, amount, address(this));
     }
 
     function liquidate(address underlyingBorrowed, address underlyingCollateral, address borrower, uint256 amount)

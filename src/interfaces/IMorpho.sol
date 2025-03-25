@@ -100,6 +100,9 @@ interface IMorpho is IMorphoGetters, IMorphoSetters {
         Types.Signature calldata signature
     ) external returns (uint256 supplied);
 
+    function supplyAgg(address underlying, uint256 amount, address onBehalf, uint256 maxItereations)
+    external returns (uint256 suppliedAgg);
+
     function borrow(address underlying, uint256 amount, address onBehalf, address receiver, uint256 maxIterations)
         external
         returns (uint256 borrowed);
@@ -119,6 +122,9 @@ interface IMorpho is IMorphoGetters, IMorphoSetters {
     function withdrawCollateral(address underlying, uint256 amount, address onBehalf, address receiver)
         external
         returns (uint256 withdrawn);
+    function withdrawAgg(address underlying, uint256 amount, address onBehalf, address receiver, uint256 maxIterations)
+        external
+        returns (uint256 withdrawnAgg);
 
     function approveManager(address manager, bool isAllowed) external;
     function approveManagerWithSig(

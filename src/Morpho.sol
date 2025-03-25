@@ -23,8 +23,8 @@ import {MorphoSetters} from "./MorphoSetters.sol";
 /// @author Morpho Labs
 /// @custom:contact security@morpho.xyz
 /// @notice The main Morpho contract exposing all user entry points.
-contract Morpho is IMorpho, MorphoGetters, MorphoSetters {
-    using DelegateCall for address;
+contract Morpho is IMorpho, MorphoGetters, MorphoSetters { 
+    using DelegateCall for address; //address, ERC20, ERC20Permit2는 Solidity의 기본 데이터 타입. 각 방식을 통해 기본 데이터 타입에 적용 가능한 함수를 확장하는 과정. 이것을 통해 (Some)Address.(In DelegateCall)SomeFunction 가능
     using SafeTransferLib for ERC20;
     using Permit2Lib for ERC20Permit2;
 
@@ -43,12 +43,13 @@ contract Morpho is IMorpho, MorphoGetters, MorphoSetters {
     ) external initializer {
         __Ownable_init_unchained();
 
-        _addressesProvider = IPoolAddressesProvider(addressesProvider);
-        _pool = IPool(_addressesProvider.getPool());
-
+        _addressesProvider = IPoolAddressesProvider(addressesProvider); //IPoolAddressProvider(addressProvider)의 의미: addressProvider을 IPoolAddressProvider로 캐스팅함. 단순 20바이트 값을 IPoolAddressProvider타입으로 취급해달라는 의미
+        _pool = IPool(_addressesProvider.getPool()); 
+        // _를 쓰는 것은 상태 변수(State Variables): 블록체인에 영구적으로 저장되며 모든 함수에서 접근 가능. 관례적 표기
+        //지역 변수의 경우 _ 를 쓰지 않으며, 함수 내에서만 존재하며 함수 실행이 끝나면 사라짐
         _positionsManager = positionsManager;
-        _defaultIterations = defaultIterations;
-        emit Events.DefaultIterationsSet(defaultIterations.repay, defaultIterations.withdraw);
+        _defaultIterations = defaultIterations; // 임시 데이터(defaultIterations)를 영구 저장소(_defaultIterations)에 저장하는 것
+        emit Events.DefaultIterationsSet(defaultIterations.repay, defaultIterations.withdraw); // 블록체인에 로그를 기록하는 방식, 스마트 컨트랙트가 특정 액션이 발생했음을 외부에 알리는 메커니즘. 프론트엔드나 다른 서비스에서 이벤트 감지 및 반응 가능
         emit Events.PositionsManagerSet(positionsManager);
 
         _eModeCategoryId = eModeCategoryId;
@@ -125,6 +126,23 @@ contract Morpho is IMorpho, MorphoGetters, MorphoSetters {
         return _supplyCollateral(underlying, amount, msg.sender, onBehalf);
     }
 
+    function supplyAgg(address underlying, uint256 amount, address onBehalf, uint256 maxIterations)
+        external
+        returns (uint256)
+    {
+        return _supplyAgg(underlying, amount, msg.sender, onBehalf, maxIterations);
+    }
+
+    function _supplyAgg(address underlying, uint256 amount, address from, address onBehalf, uint256 maxIterations)
+        internal
+        returns (uint256)
+    {
+        bytes memory returnData = _positionsManager.functionDelegateCall(
+            abi.encodeCall(IPositionsManager.supplyAggLogic, (underlying, amount, from, onBehalf, maxIterations))
+        );
+        return (abi.decode(returnData, (uint256)));
+    }
+
     /// @notice Borrows `amount` of `underlying` on behalf of `onBehalf`.
     ///         If sender is not `onBehalf`, sender must have previously been approved by `onBehalf` using `approveManager`.
     /// @param underlying The address of the underlying asset to borrow.
@@ -199,6 +217,26 @@ contract Morpho is IMorpho, MorphoGetters, MorphoSetters {
     {
         return _withdrawCollateral(underlying, amount, onBehalf, receiver);
     }
+    
+    function withdrawAgg(address underlying, uint256 amount, address onBehalf, address receiver, uint256 maxIterations)
+        external
+        returns (uint256)
+    {
+        return _withdrawAgg(underlying, amount, onBehalf, receiver, maxIterations);
+    }
+
+    function _withdrawAgg(address underlying, uint256 amount, address onBehalf, address receiver, uint256 maxIterations)
+        internal
+        returns (uint256)
+    {
+        bytes memory returnData = _positionsManager.functionDelegateCall(
+            abi.encodeCall(IPositionsManager.withdrawAggLogic, (underlying, amount, onBehalf, receiver, maxIterations))
+        );
+
+        return (abi.decode(returnData, (uint256)));
+    }
+
+
 
     /// @notice Liquidates `user`.
     /// @param underlyingBorrowed The address of the underlying borrowed to repay.
