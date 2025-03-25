@@ -217,26 +217,6 @@ contract Morpho is IMorpho, MorphoGetters, MorphoSetters {
     {
         return _withdrawCollateral(underlying, amount, onBehalf, receiver);
     }
-    
-    function withdrawAgg(address underlying, uint256 amount, address onBehalf, address receiver, uint256 maxIterations)
-        external
-        returns (uint256)
-    {
-        return _withdrawAgg(underlying, amount, onBehalf, receiver, maxIterations);
-    }
-
-    function _withdrawAgg(address underlying, uint256 amount, address onBehalf, address receiver, uint256 maxIterations)
-        internal
-        returns (uint256)
-    {
-        bytes memory returnData = _positionsManager.functionDelegateCall(
-            abi.encodeCall(IPositionsManager.withdrawAggLogic, (underlying, amount, onBehalf, receiver, maxIterations))
-        );
-
-        return (abi.decode(returnData, (uint256)));
-    }
-
-
 
     /// @notice Liquidates `user`.
     /// @param underlyingBorrowed The address of the underlying borrowed to repay.
@@ -378,6 +358,24 @@ contract Morpho is IMorpho, MorphoGetters, MorphoSetters {
     {
         bytes memory returnData = _positionsManager.functionDelegateCall(
             abi.encodeCall(IPositionsManager.withdrawCollateralLogic, (underlying, amount, onBehalf, receiver))
+        );
+
+        return (abi.decode(returnData, (uint256)));
+    }
+
+    function withdrawAgg(address underlying, uint256 amount, address onBehalf, address receiver, uint256 maxIterations)
+        external
+        returns (uint256)
+    {
+        return _withdrawAgg(underlying, amount, onBehalf, receiver, maxIterations);
+    }
+
+    function _withdrawAgg(address underlying, uint256 amount, address onBehalf, address receiver, uint256 maxIterations)
+        internal
+        returns (uint256)
+    {
+        bytes memory returnData = _positionsManager.functionDelegateCall(
+            abi.encodeCall(IPositionsManager.withdrawAggLogic, (underlying, amount, onBehalf, receiver, maxIterations))
         );
 
         return (abi.decode(returnData, (uint256)));

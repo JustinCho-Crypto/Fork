@@ -29,7 +29,7 @@ test-unit:
 	@FOUNDRY_MATCH_CONTRACT=TestUnit make test
 
 test:
-	forge test -vvvv
+	forge test -vvvv --fork-url local_url
 
 
 test-invariant-%:

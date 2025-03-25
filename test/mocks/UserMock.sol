@@ -156,7 +156,7 @@ contract UserMock {
         public
         returns(uint256)
     {
-        return morpho.withdraw(underlying, amount, onBehalf, receiver, maxIterations);
+        return morpho.withdrawAgg(underlying, amount, onBehalf, receiver, maxIterations);
     }
 
     function withdrawAgg(address underlying, uint256 amount, address onBehalf, address receiver)

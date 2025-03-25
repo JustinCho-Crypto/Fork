@@ -598,103 +598,92 @@ abstract contract PositionsManagerInternal is MatchingEngine {
         emit Events.CollateralWithdrawn(msg.sender, onBehalf, receiver, underlying, amount, collateralBalance);
     }
 
-    function _executeWithdrawAgg(
-        address underlying,
-        uint256 amount,
-        address onBehalf,
-        address receiver,
-        uint256 maxIterations,
-        Types.Indexes256 memory indexes
-    ) internal returns (Types.BorrowWithdrawVars memory vars) {
-        vars = _accountWithdrawAgg(underlying, amount, onBehalf, maxIterations, indexes);
+function _executeWithdrawAgg(
+    address underlying,
+    uint256 amount,
+    address onBehalf,
+    address receiver,
+    uint256 maxIterations,
+    Types.Indexes256 memory indexes
+) internal returns (Types.BorrowWithdrawVars memory vars) {
+    vars = _accountWithdrawAgg(underlying, amount, onBehalf, maxIterations, indexes);
 
-        emit Events.Withdrawn(msg.sender, onBehalf, receiver, underlying, amount, vars.onPool, vars.inP2P);
-    }
-    function _accountWithdrawAgg(
-        address underlying,
-        uint256 amount,
-        address supplier,
-        uint256 maxIterations,
-        Types.Indexes256 memory indexes
-    ) internal returns (Types.BorrowWithdrawVars memory vars) {
-        Types.MarketBalances storage marketBalances = _marketBalances[underlying];
-        vars.onPool = marketBalances.scaledPoolSupplyBalance(supplier);
-        vars.inP2P = marketBalances.scaledP2PSupplyBalance(supplier);
+    emit Events.WithdrawnAgg(msg.sender, onBehalf, receiver, underlying, amount, vars.onPool, vars.inP2P);
+}
+function _accountWithdrawAgg(
+    address underlying,
+    uint256 amount,
+    address supplier,
+    uint256 maxIterations,
+    Types.Indexes256 memory indexes
+) internal returns (Types.BorrowWithdrawVars memory vars) {
+    Types.MarketBalances storage marketBalances = _marketBalances[underlying];
+    vars.onPool = marketBalances.scaledPoolSupplyBalance(supplier);
+    vars.inP2P = marketBalances.scaledP2PSupplyBalance(supplier);
 
-        uint256 poolSupplyIndex = indexes.supply.poolIndex;
+    uint256 poolSupplyIndex = indexes.supply.poolIndex;
 
-        /* Pool withdraw */
+    /* Pool withdraw */
 
-        // Performs the accounting of a withdraw collateral action.
-        
-        uint256 collateralBalance = marketBalances.collateral[supplier];
+    // Performs the accounting of a withdraw collateral action.
+    
+    uint256 collateralBalance = marketBalances.collateral[supplier];
 
-        _updateRewards(supplier, _market[underlying].aToken, collateralBalance);
+    _updateRewards(supplier, _market[underlying].aToken, collateralBalance);
 
-        if (collateralBalance < amount.rayDivUp(poolSupplyIndex)) {
-            revert Errors.InsufficientCollateral();
-        }
-        collateralBalance = collateralBalance.zeroFloorSub(amount.rayDivUp(poolSupplyIndex));
+    collateralBalance = collateralBalance.zeroFloorSub(amount.rayDivUp(poolSupplyIndex));
 
-        marketBalances.collateral[supplier] = collateralBalance;
+    marketBalances.collateral[supplier] = collateralBalance;
 
-        if (collateralBalance == 0) _userCollaterals[supplier].remove(underlying);
+    if (collateralBalance == 0) _userCollaterals[supplier].remove(underlying);
 
-        // Withdraw supply on pool.
+    // Withdraw supply on pool.
+    (amount, vars.toWithdraw, vars.onPool) = _subFromPool(amount, vars.onPool, indexes.supply.poolIndex);
 
-        if (vars.onPool < amount) {
-            revert Errors.InsufficientLiquidity();
-        }
-
-        (amount, vars.toWithdraw, vars.onPool) = _subFromPool(amount, vars.onPool, indexes.supply.poolIndex);
-
-        Types.Market storage market = _market[underlying];
+    Types.Market storage market = _market[underlying];
 
 
-        // Withdraw supply peer-to-peer.
-        if (vars.inP2P < amount.rayDivUp(indexes.supply.p2pIndex)) {
-            revert Errors.InsufficientP2PLiquidity();
-        }
-        vars.inP2P = vars.inP2P.zeroFloorSub(amount.rayDivUp(indexes.supply.p2pIndex)); // In peer-to-peer supply unit.
+    // Withdraw supply peer-to-peer.
+    vars.inP2P = vars.inP2P.zeroFloorSub(amount.rayDivUp(indexes.supply.p2pIndex)); // In peer-to-peer supply unit.
 
-        (vars.onPool, vars.inP2P) = _updateSupplierInDS(underlying, supplier, vars.onPool, vars.inP2P, false);
+    (vars.onPool, vars.inP2P) = _updateSupplierInDS(underlying, supplier, vars.onPool, vars.inP2P, false);
 
-        // Returning early requires having updated the supplier in the data structure, which in turn requires having updated `inP2P`.
-        if (amount == 0) return vars;
+    // Returning early requires having updated the supplier in the data structure, which in turn requires having updated `inP2P`.
+    if (amount == 0) return vars;
 
-        // Decrease the peer-to-peer idle supply.
-        uint256 matchedIdle;
-        (amount, matchedIdle) = market.decreaseIdle(underlying, amount);
+    // Decrease the peer-to-peer idle supply.
+    uint256 matchedIdle;
+    (amount, matchedIdle) = market.decreaseIdle(underlying, amount);
 
-        // Decrease the peer-to-peer supply delta.
-        uint256 toWithdrawStep;
-        (amount, toWithdrawStep) =
-            market.deltas.supply.decreaseDelta(underlying, amount, indexes.supply.poolIndex, false);
+    // Decrease the peer-to-peer supply delta.
+    uint256 toWithdrawStep;
+    (amount, toWithdrawStep) =
+        market.deltas.supply.decreaseDelta(underlying, amount, indexes.supply.poolIndex, false);
+    vars.toWithdraw += toWithdrawStep;
+    uint256 p2pTotalSupplyDecrease = toWithdrawStep + matchedIdle;
+
+    /* Transfer withdraw */
+
+    if (!market.isP2PDisabled()) {
+        // Promote pool suppliers.
+        (vars.toBorrow, toWithdrawStep, maxIterations) =
+            _promoteRoutine(underlying, amount, maxIterations, _promoteSuppliers);
         vars.toWithdraw += toWithdrawStep;
-        uint256 p2pTotalSupplyDecrease = toWithdrawStep + matchedIdle;
-
-        /* Transfer withdraw */
-
-        if (!market.isP2PDisabled()) {
-            // Promote pool suppliers.
-            (vars.toBorrow, toWithdrawStep, maxIterations) =
-                _promoteRoutine(underlying, amount, maxIterations, _promoteSuppliers);
-            vars.toWithdraw += toWithdrawStep;
-        } else {
-            vars.toBorrow = amount;
-        }
-
-        /* Breaking withdraw */
-
-        // Demote peer-to-peer borrowers.
-        uint256 demoted = _demoteBorrowers(underlying, vars.toBorrow, maxIterations);
-
-        // Increase the peer-to-peer borrow delta.
-        market.deltas.borrow.increaseDelta(underlying, vars.toBorrow - demoted, indexes.borrow, true);
-
-        // Update the peer-to-peer totals.
-        market.deltas.decreaseP2P(underlying, demoted, vars.toBorrow + p2pTotalSupplyDecrease, indexes, true);
+    } else {
+        vars.toBorrow = amount;
     }
+
+    /* Breaking withdraw */
+
+    // Demote peer-to-peer borrowers.
+    uint256 demoted = _demoteBorrowers(underlying, vars.toBorrow, maxIterations);
+
+    // Increase the peer-to-peer borrow delta.
+    market.deltas.borrow.increaseDelta(underlying, vars.toBorrow - demoted, indexes.borrow, true);
+
+    // Update the peer-to-peer totals.
+    market.deltas.decreaseP2P(underlying, demoted, vars.toBorrow + p2pTotalSupplyDecrease, indexes, true);
+}
 
     /// @notice Given variables from a market side, calculates the amount to supply/borrow and a new on pool amount.
     /// @param amount The amount to supply/borrow.
