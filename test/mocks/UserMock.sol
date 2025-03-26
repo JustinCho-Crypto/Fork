@@ -61,15 +61,15 @@ contract UserMock {
         return supplyCollateral(underlying, amount, address(this));
     }
 
-    function supplyAgg(address underlying, uint256 amount, address onBehalf, uint256 maxItereations)
+    function supplyAgg(address _poolToken, address _onBehalf, uint256 _amount, uint256 maxItereations)
     public returns (uint256) {
-        return morpho.supplyAgg(underlying, amount, onBehalf, maxItereations);
+        return morpho.supplyAgg(_poolToken, _onBehalf, _amount, maxItereations);
     }
 
-    function supplyAgg(address underlying, uint256 amount, address onBehalf) 
+    function supplyAgg(address _poolToken, address _onBehalf, uint256 _amount) 
         public
         returns (uint256) {
-            return morpho.supplyAgg(underlying, amount, onBehalf, DEFAULT_MAX_ITERATIONS);
+            return morpho.supplyAgg(_poolToken, _onBehalf, _amount, DEFAULT_MAX_ITERATIONS);
         }
     
 
@@ -152,39 +152,39 @@ contract UserMock {
         return withdrawCollateral(underlying, amount, address(this));
     }
 
-    function withdrawAgg(address underlying, uint256 amount, address onBehalf, address receiver, uint256 maxIterations)
+    function withdrawAgg(address _poolToken, uint256 _amount, address _supplier, address _receiver, uint256 _maxIterations)
         public
         returns(uint256)
     {
-        return morpho.withdrawAgg(underlying, amount, onBehalf, receiver, maxIterations);
+        return morpho.withdrawAgg(_poolToken, _amount, _supplier, _receiver, _maxIterations);
     }
 
-    function withdrawAgg(address underlying, uint256 amount, address onBehalf, address receiver)
+    function withdrawAgg(address _poolToken, uint256 _amount, address _supplier, address _receiver)
         public
         returns(uint256)
     {
-        return withdrawAgg(underlying, amount, onBehalf, receiver, DEFAULT_MAX_ITERATIONS);
+        return withdrawAgg(_poolToken, _amount, _supplier, _receiver, DEFAULT_MAX_ITERATIONS);
     }
 
-    function withdrawAgg(address underlying, uint256 amount, uint256 maxIterations)
+    function withdrawAgg(address _poolToken, uint256 _amount, uint256 _maxIterations)
         public 
         returns(uint256)
     {
-        return withdrawAgg(underlying, amount, address(this), address(this), maxIterations);
+        return withdrawAgg(_poolToken, _amount, address(this), address(this), _maxIterations);
     }
 
-    function withdrawAgg(address underlying, uint256 amount, address onBehalf)
+    function withdrawAgg(address _poolToken, uint256 _amount, address _supplier)
         public 
         returns(uint256)
     {
-        return withdrawAgg(underlying, amount, onBehalf, address(this));
+        return withdrawAgg(_poolToken, _amount, _supplier, address(this));
     }
 
-    function withdrawAgg(address underlying, uint256 amount)
+    function withdrawAgg(address _poolToken, uint256 _amount)
         public 
         returns(uint256)
     {
-        return withdrawAgg(underlying, amount, address(this));
+        return withdrawAgg(_poolToken, _amount, address(this));
     }
 
     function liquidate(address underlyingBorrowed, address underlyingCollateral, address borrower, uint256 amount)

@@ -69,6 +69,9 @@ test-unit/%:
 test/%:
 	@FOUNDRY_MATCH_CONTRACT=$* make test
 
+test-function-%:
+	forge test -vvvv --fork-url local_url --match-test $*
+
 
 coverage:
 	forge coverage --report lcov

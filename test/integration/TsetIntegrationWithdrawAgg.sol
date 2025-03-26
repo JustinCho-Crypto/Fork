@@ -46,7 +46,7 @@ contract TestIntegrationWithdrawAgg is IntegrationTest {
         test.morphoSupplyBefore = market.supplyOf(address(morpho));
 
         user.approve(market.underlying, test.supplied);
-        user.supplyAgg(market.underlying, test.supplied, onBehalf);
+        user.supplyAgg(market.underlying, onBehalf, test.supplied);
 
         vm.expectEmit(true, true, true, false, address(morpho));
         emit Events.WithdrawnAgg(address(user), onBehalf, receiver, market.underlying, amount, 0, 0);
@@ -134,7 +134,7 @@ contract TestIntegrationWithdrawAgg is IntegrationTest {
         console2.log("(Before func2)amount: ", amount);
 
         user.approve(market.underlying, test.supplied);
-        user.supplyAgg(market.underlying, test.supplied, onBehalf);
+        user.supplyAgg(market.underlying, onBehalf, test.supplied);
 
         if (promoted > 0) {
             vm.expectEmit(true, true, true, false, address(morpho));

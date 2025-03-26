@@ -126,19 +126,19 @@ contract Morpho is IMorpho, MorphoGetters, MorphoSetters {
         return _supplyCollateral(underlying, amount, msg.sender, onBehalf);
     }
 
-    function supplyAgg(address underlying, uint256 amount, address onBehalf, uint256 maxIterations)
+    function supplyAgg(address _poolToken, address _onBehalf, uint256 _amount, uint256 _maxIterations)
         external
         returns (uint256)
     {
-        return _supplyAgg(underlying, amount, msg.sender, onBehalf, maxIterations);
+        return _supplyAgg(_poolToken, _amount, _onBehalf, _maxIterations);
     }
 
-    function _supplyAgg(address underlying, uint256 amount, address from, address onBehalf, uint256 maxIterations)
+    function _supplyAgg(address _poolToken, uint256 _amount, address _onBehalf, uint256 _maxIterations)
         internal
         returns (uint256)
     {
-        bytes memory returnData = _positionsManager.functionDelegateCall(
-            abi.encodeCall(IPositionsManager.supplyAggLogic, (underlying, amount, from, onBehalf, maxIterations))
+        bytes memory returnData = address(_positionsManager).functionDelegateCall(
+            abi.encodeWithSelector(IPositionsManager.supplyAggLogic.selector, _poolToken, _amount, msg.sender, _onBehalf, _maxIterations)
         );
         return (abi.decode(returnData, (uint256)));
     }
@@ -363,19 +363,19 @@ contract Morpho is IMorpho, MorphoGetters, MorphoSetters {
         return (abi.decode(returnData, (uint256)));
     }
 
-    function withdrawAgg(address underlying, uint256 amount, address onBehalf, address receiver, uint256 maxIterations)
+    function withdrawAgg(address _poolToken, uint256 _amount, address _supplier, address _receiver, uint256 _maxIterations)
         external
         returns (uint256)
     {
-        return _withdrawAgg(underlying, amount, onBehalf, receiver, maxIterations);
+        return _withdrawAgg(_poolToken, _amount, _supplier, _receiver, _maxIterations);
     }
 
-    function _withdrawAgg(address underlying, uint256 amount, address onBehalf, address receiver, uint256 maxIterations)
+    function _withdrawAgg(address _poolToken, uint256 _amount, address _supplier, address _receiver, uint256 _maxIterations)
         internal
         returns (uint256)
     {
-        bytes memory returnData = _positionsManager.functionDelegateCall(
-            abi.encodeCall(IPositionsManager.withdrawAggLogic, (underlying, amount, onBehalf, receiver, maxIterations))
+        bytes memory returnData = address(_positionsManager).functionDelegateCall(
+            abi.encodeWithSelector(IPositionsManager.withdrawAggLogic.selector, _poolToken, _amount, _supplier, _receiver, _maxIterations)
         );
 
         return (abi.decode(returnData, (uint256)));

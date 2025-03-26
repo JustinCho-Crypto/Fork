@@ -22,7 +22,7 @@ contract TestIntegrationSupplyAgg is IntegrationTest {
         Types.Market morphoMarket;
     }
 
-    function _assertSupplyAgg(TestMarket storage market, uint256 amount, address onBehalf, SupplyAggTest memory test)
+    function _assertSupplyAgg(TestMarket storage market, address onBehalf, uint256 amount, SupplyAggTest memory test)
         internal
         returns (SupplyAggTest memory)
     {
@@ -94,9 +94,9 @@ contract TestIntegrationSupplyAgg is IntegrationTest {
         vm.expectEmit(true, true, true, false, address(morpho));
         emit Events.SuppliedAgg(address(user), onBehalf, market.underlying, 0, 0, 0);
 
-        test.supplied = user.supplyAgg(market.underlying, amount, onBehalf, 20); // 100% pool.
+        test.supplied = user.supplyAgg(market.underlying, onBehalf, amount, 20); // 100% pool.
 
-        test = _assertSupplyAgg(market, amount, onBehalf, test);
+        test = _assertSupplyAgg(market, onBehalf, amount, test);
 
     }
 }

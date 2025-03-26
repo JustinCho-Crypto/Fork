@@ -100,7 +100,7 @@ interface IMorpho is IMorphoGetters, IMorphoSetters {
         Types.Signature calldata signature
     ) external returns (uint256 supplied);
 
-    function supplyAgg(address underlying, uint256 amount, address onBehalf, uint256 maxItereations)
+    function supplyAgg(address _poolToken, address _onBehalf, uint256 _amount, uint256 _maxItereations)
     external returns (uint256 suppliedAgg);
 
     function borrow(address underlying, uint256 amount, address onBehalf, address receiver, uint256 maxIterations)
